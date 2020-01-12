@@ -5,9 +5,6 @@ Created on Wed Jan  1 16:15:35 2020
 @author: Read
 """
 
-#math.tan(math.radians(-30))
-#math.atan2(-1,0)
-
 import pygame, sys, math, random, gc , numpy as np
 
 gc.collect()
@@ -17,65 +14,9 @@ scr_w = 400
 scr_h = 700
 g = 9.8
 fps = 60
-friction=.8
+friction=.9
 
 
-
-#def addVectors(angle1, length1, angle2, length2):
-#    x = math.sin(angle1) * length1 + math.sin(angle2) * length2
-#    y = math.cos(angle1) * length1 + math.cos(angle2) * length2
-#    length = math.hypot(x, y)
-#    angle = 0.5 * math.pi - math.atan2(y, x)
-#    return (angle, length)
-
-def check_distance(bouncer,ball):
-    x_dist = abs(bouncer.cx - ball.cx)
-    y_dist = abs(bouncer.cy - ball.cy)
-    hypot = math.sqrt(x_dist**2+y_dist**2)
-    radius_sum = bouncer.r+ball.r
-    angle = math.atan2(bouncer.cy-ball.cy,bouncer.cx-ball.cx) #y is measured from top so this has to be a little backwards
-    if angle<0:
-        angle = angle + 2*math.pi
-    if hypot<=radius_sum:
-        collide = True
-    else:
-        collide = False
-    return(collide, angle, hypot, radius_sum)
-
-def calc_collision(obj1,obj2):
-    collide, angle, hypot, radius_sum = check_distance(bouncer=obj1,ball=obj2)
-    orig_color1 = obj1.color
-    orig_color2 = obj2.color
-    if collide == True:
-        obj2.collide=True
-        obj1.color = (255,0,0)
-        obj2.color = (100,100,100)
-            
-        #reverse rad of ball for new angle of entry        
-        rev_ball_rad = (obj2.rad+math.pi) % (2*math.pi)
-        
-        #take difference in rad_bouncer and angle of enrty
-        diff_rad = angle-rev_ball_rad
-        
-        #double it
-        doub_diff_rad = diff_rad*2
-        
-        # and subtract that from new angle of entry
-        new_rad = rev_ball_rad+doub_diff_rad
-        
-        #calc new xv and yv for ball and set ball.xv and ball.yv to that
-        new_xv = math.cos(new_rad )*obj2.v  
-        new_yv = math.sqrt(obj2.v**2-new_xv**2)
-        new_x = obj2.x+new_xv
-        new_y = obj2.y+new_yv
-        obj2.x = new_x
-        obj2.y = new_y
-        obj2.xv = new_xv*1.02
-        obj2.yv = new_yv*1.02
-    else:
-        obj2.collide=False
-    obj1.color = orig_color1
-    obj2.color = orig_color2
 
 class Object:  
     def __init__(self, color, x, y, w, h, xv, yv, m):
@@ -91,15 +32,7 @@ class Object:
     @property
     def r(self):
         return self.w
-    
-    @property
-    def cx(self):
-        return self.x 
-
-    @property
-    def cy(self):
-        return self.y 
-        
+           
     @property
     def v(self):
         return math.hypot(self.xv,self.yv)
@@ -122,12 +55,71 @@ class Object:
     @property
     def mom(self):
         return(self.m*self.v)
+
+    @property
+    def next_x(self):
+        return(self.x+self.xv)
+
+    @property
+    def next_y(self):
+        return(self.y-self.yv)
         
 
 
 class Ball(Object):
     collide=False
-    
+    still_collide = False
+
+    def bouncer_collision(self, bouncer):
+        x_dist = abs(bouncer.next_x - self.next_x)
+        y_dist = abs(bouncer.next_y - self.next_y)
+        hypot = math.sqrt(x_dist**2+y_dist**2)
+        radius_sum = bouncer.r+self.r
+        angle = math.atan2(bouncer.y-self.y,bouncer.x-self.x) #y is measured from top so this has to be a little backwards
+        if angle<0:
+            angle = angle + 2*math.pi
+
+        fut_dist_from_bouncer = math.hypot(self.x+self.xv,self.y+self.yv)
+
+        if hypot>radius_sum:
+            self.collide = False
+            self.still_collide = False
+            self.color = (255,0,0)
+        else:
+            if self.still_collide==True:
+                pass
+            else:
+                self.collide = True
+                self.color = (100,255,150)
+            
+                #reverse rad of ball for new angle around which we will transform the entry/exit vector       
+                rev_ball_rad = (self.rad+math.pi) % (2*math.pi)
+        
+                #take difference in rad_bouncer and angle of enrty
+                diff_rad = angle-rev_ball_rad
+        
+                #double it
+                doub_diff_rad = diff_rad*2
+        
+                # and subtract that from new angle of entry
+                new_rad = rev_ball_rad+doub_diff_rad
+        
+                #calc new xv and yv for ball and set ball.xv and ball.yv to that
+                new_xv = math.cos(new_rad )*self.v  
+                new_yv = math.sqrt(self.v**2-new_xv**2)
+                new_x = self.x+new_xv
+                new_y = self.y+new_yv
+            
+                if math.hypot(bouncer.y-new_y,bouncer.x+new_x)<radius_sum:
+                    self.still_collide=True
+
+                #assign vals
+                self.x = new_x
+                self.y = new_y
+                self.xv = new_xv
+                self.yv = new_yv
+
+
     @property
     def calc_new_loc(self):
         xv2 = self.xv 
@@ -139,10 +131,7 @@ class Ball(Object):
             xv2 = (self.xv *-1) * friction
             x2 = min(max(self.x + xv2,0),scr_w-self.w)
         if y2-self.h<0 or (y2+self.h)>scr_h:
-            if self.collide==False:
-                yv2 = self.yv*-1 + g/fps
-            else:
-                yv2 = self.yv*-1
+            yv2 = self.yv*-1 + g/fps
             xv2 = self.xv * friction
             y2 = min(max(self.y + yv2 ,0),scr_h-self.h)
                    
@@ -150,14 +139,7 @@ class Ball(Object):
     
     @property
     def rect(self):
-        return pygame.Rect.circle(surface=screen, color=self.color, center=(self.cx,self.cy), radius=self.r, width=self.w)
-#    https://stackoverflow.com/questions/10866003/pygame-rect-around-circle/10866541  
-#   use the link above
-    
-#    @property
-#    def collide_test(self):
-#        return pygame.Rect.colliderect(self.rect)
-            
+        return pygame.Rect.circle(surface=screen, color=self.color, center=(self.x,self.y), radius=self.r, width=self.w)
         
 class Bouncer(Object):
     decel_factor = .99
@@ -171,10 +153,10 @@ class Bouncer(Object):
         
         if x2-self.w<0 or (x2+self.w)>scr_w:
             xv2 = 0
-            x2 = min(max(self.x + xv2,0),scr_w-self.w)
+            x2 = min(max(self.x - self.w,0),scr_w-self.w)
         if y2-self.h<0 or (y2+self.h)>scr_h:
             yv2 = 0
-            y2 = min(max(self.y + yv2 ,0),scr_h-self.h)
+            y2 = min(max(self.y - self.h ,0),scr_h-self.h)
             
         return(x2,y2,xv2,yv2)
 
@@ -202,7 +184,12 @@ def calc_chg_xv_yv(obj1,obj2):
     return(obj1_new_xv, obj1_new_yv)
     
 
+pygame.init()
+screen = pygame.display.set_mode((scr_w, scr_h))
+pygame.display.set_caption('AI BOUNCER')
 
+font = pygame.font.Font(None, 15)
+clock = pygame.time.Clock()  
 
 class Game:
     def menu():
@@ -214,7 +201,7 @@ class Game:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                         pygame.quit()
-                        sys.exit() 
+                        #sys.exit() 
             
             
             pressed = pygame.key.get_pressed()
@@ -231,10 +218,9 @@ class Game:
             Gary.x,Gary.y,Gary.xv,Gary.yv = Gary.calc_new_loc
                                  
             #more game state here
-            calc_collision(Gary,Bally)
-            
-            
-            
+            Bally.bouncer_collision(Gary)
+
+
             
             #draw screen
             screen.fill((0, 0, 0))
@@ -247,9 +233,9 @@ class Game:
             framerate = font.render(str(int(clock.get_fps())), True, pygame.Color('white'))
             screen.blit(framerate, (scr_w-50,50))
             
-        #    draw hypot distance on screen
-        #    hypot_dist = font.render(str(hypot_dist),True,pygame.Color('white'))
-        #    screen.blit(hypot_dist,(Gary.cx,Gary.cy))
+        #    draw hypot distance on screen #for debugging
+            Bally_rad = font.render(str(Bally.rad),True,pygame.Color('white'))
+            screen.blit(Bally_rad,(Gary.x,Gary.y))
             
             pygame.display.flip()
             clock.tick(fps)
@@ -260,12 +246,7 @@ x = 200
 y = 200
 blue = (0, 128, 255)
 
-pygame.init()
-screen = pygame.display.set_mode((scr_w, scr_h))
-pygame.display.set_caption('AI BOUNCER')
-
-font = pygame.font.Font(None, 15)
-clock = pygame.time.Clock()    
+  
 
 if __name__=="__main__":
     Game.main()
