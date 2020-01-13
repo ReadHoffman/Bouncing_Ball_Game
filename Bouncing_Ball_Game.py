@@ -12,37 +12,83 @@ gc.collect()
 #constants
 scr_w = 400
 scr_h = 700
-g = 9.8
+wall_objs = [Wall_W,Wall_S,Wall_E,Wall_N]
+wall_pts = [[scr_w*.1,scr_h*.1],[scr_w*.1,scr_h*.9],[scr_w*.9,scr_h*.9],[scr_w*.9,scr_h*.1],[scr_w*.1,scr_h*.1]]
+g = -9.8
+g_rad = math.pi*1.5
 fps = 60
 friction=.9
 
+def collision(r1,r2):
+    ca = r1.radians_from_obj(r2) #ca means contact angle
+    xv_new_r1 = ( r1.v*math.cos(r1.rad-ca)*(r1.m-r2.m)+2*r2.mom*math.cos(r2.rad-ca) 
+                 )/(r1.m+r2.m)*cos(ca) + r1.v*math.sin(r1.rad-ca)*math.cos(ca+math.pi/2)
+    yv_new_r1 = ( r1.v*math.cos(r1.rad-ca)*(r1.m-r2.m)+2*r2.mom*math.cos(r2.rad-ca) 
+                 )/(r1.m+r2.m)*cos(ca) + r1.v*math.sin(r1.rad-ca)*math.sin(ca+math.pi/2)
+   #convert to v and rad
+    v_new = math.hypot(yv_new_r1,xv_new_r1)
+    rad_new = math.atan2(yv_new_r1,xv_new_r1)
+    
+    return v_new , rad_new
 
+class Wall():
+    def __init__(self,x1,y1,x2,y2,x,y):
+        self.x1 = x1
+        self.y1 = y1
+        self.x2 = x2
+        self.y2 = y2
+        self.x = x
+        self.y = y
 
-class Object:  
-    def __init__(self, color, x, y, w, h, xv, yv, m):
+#create wall objs
+for c,wall in enumerate(wall_objs):
+    x1 = wall_pts[c][0]
+    y1 = wall_pts[c][1]
+    x2 = wall_pts[c+1][0]
+    y2 = wall_pts[c+1][1]
+    wall = Wall(x1,y1,x2,y2,x,y)
+
+class Object(pygame.sprite.Sprite):  
+    def __init__(self, color, x, y, w, h, m, v, rad):
         self.color = color 
         self.x = x
         self.y = y
         self.w = w
         self.h = h
-        self.xv = xv
-        self.yv = yv
         self.m = m
+        self.v = v
+        self.rad = rad
+             
+    @property
+    def xv(self):
+        return math.cos(self.rad)*self.v
+    
+    @property
+    def yv(self):
+        return math.sin(self.rad)*self.v + g/fps #make sure to add change due to gravity
+
+    @property
+    def update_v_rad(self):
+        self.v = math.hypot(self.yv,self.xv)
+        self.rad =  math.atan2(self.yv,self.xv)
+    
+
+    @property
+    def next_x(self):
+        return self.x+self.xv
+    
+    @property
+    def next_y(self):
+        return self.y-self.yv #must subtract y delta since pygame draws from top left
+
+    @property
+    def update_xy(self):
+        self.x = self.next_x
+        self.y = self.next_y 
     
     @property
     def r(self):
         return self.w
-           
-    @property
-    def v(self):
-        return math.hypot(self.xv,self.yv)
-        
-    @property
-    def rad(self):
-        atan2 = math.atan2(self.yv,self.xv)
-        if atan2 <0:
-            atan2 = atan2 + 2*math.pi
-        return atan2
     
     @property
     def deg(self):
@@ -50,106 +96,132 @@ class Object:
     
     @property
     def circle_rect(self):
-        return(pygame.draw.circle(screen, self.color, (self.x, self.y), self.w))
+        return(pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.r,1) )
         
     @property
     def mom(self):
         return(self.m*self.v)
 
-    @property
-    def next_x(self):
-        return(self.x+self.xv)
+    def check_collide(self,obj):
+        x_dist = abs(obj.x - self.x)
+        y_dist = abs(obj.y - self.y)
+        hypot = math.hypot(y_dist,x_dist)
+        radius_sum = obj.r+self.r
+        if hypot<radius_sum:
+            return True
+        else:
+            False
 
     @property
-    def next_y(self):
-        return(self.y-self.yv)
-        
-
-
-class Ball(Object):
-    collide=False
-    still_collide = False
-
-    def bouncer_collision(self, bouncer):
-        x_dist = abs(bouncer.next_x - self.next_x)
-        y_dist = abs(bouncer.next_y - self.next_y)
-        hypot = math.sqrt(x_dist**2+y_dist**2)
-        radius_sum = bouncer.r+self.r
-        angle = math.atan2(bouncer.y-self.y,bouncer.x-self.x) #y is measured from top so this has to be a little backwards
+    def radians_from_obj(self,obj):
+        x_dist = abs(obj.x - self.x)
+        y_dist = abs(obj.y - self.y)
+        hypot = math.hypot(y_dist,x_dist)
+        radius_sum = obj.r+self.r
+        angle = math.atan2(obj.y-self.y,self.x-obj.x) #y is measured from top so this has to be a little backwards
         if angle<0:
             angle = angle + 2*math.pi
+        return angle, hypot, radius_sum
 
-        fut_dist_from_bouncer = math.hypot(self.x+self.xv,self.y+self.yv)
 
-        if hypot>radius_sum:
-            self.collide = False
-            self.still_collide = False
-            self.color = (255,0,0)
-        else:
-            if self.still_collide==True:
-                pass
-            else:
-                self.collide = True
-                self.color = (100,255,150)
+
+
+
+
+
+#class Ball(Object):
+    #collide=False
+    #still_collide = False
+
+    #def bouncer_collision(self, bouncer):
+    #    x_dist = abs(bouncer.next_x - self.next_x)
+    #    y_dist = abs(bouncer.next_y - self.next_y)
+    #    hypot = math.sqrt(x_dist**2+y_dist**2)
+    #    radius_sum = bouncer.r+self.r
+    #    angle = math.atan2(bouncer.y-self.y,bouncer.x-self.x) #y is measured from top so this has to be a little backwards
+    #    if angle<0:
+    #        angle = angle + 2*math.pi
+
+    #    fut_dist_from_bouncer = math.hypot(self.x+self.xv,self.y+self.yv)
+
+    #    if hypot>radius_sum:
+    #        self.collide = False
+    #        self.still_collide = False
+    #        self.color = (255,0,0)
+    #    else:
+    #        if self.still_collide==True:
+    #            pass
+    #        else:
+    #            self.collide = True
+    #            self.color = (100,255,150)
             
-                #reverse rad of ball for new angle around which we will transform the entry/exit vector       
-                rev_ball_rad = (self.rad+math.pi) % (2*math.pi)
+    #            #reverse rad of ball for new angle around which we will transform the entry/exit vector       
+    #            rev_ball_rad = (self.rad+math.pi) % (2*math.pi)
         
-                #take difference in rad_bouncer and angle of enrty
-                diff_rad = angle-rev_ball_rad
+    #            #take difference in rad_bouncer and angle of enrty
+    #            diff_rad = angle-rev_ball_rad
         
-                #double it
-                doub_diff_rad = diff_rad*2
+    #            #double it
+    #            doub_diff_rad = diff_rad*2
         
-                # and subtract that from new angle of entry
-                new_rad = rev_ball_rad+doub_diff_rad
+    #            # and subtract that from new angle of entry
+    #            new_rad = rev_ball_rad+doub_diff_rad
         
-                #calc new xv and yv for ball and set ball.xv and ball.yv to that
-                new_xv = math.cos(new_rad )*self.v  
-                new_yv = math.sqrt(self.v**2-new_xv**2)
-                new_x = self.x+new_xv
-                new_y = self.y+new_yv
+    #            #calc new xv and yv for ball and set ball.xv and ball.yv to that
+    #            new_xv = math.cos(new_rad )*self.v  
+    #            new_yv = math.sqrt(self.v**2-new_xv**2)
+    #            new_x = self.x+new_xv
+    #            new_y = self.y+new_yv
             
-                if math.hypot(bouncer.y-new_y,bouncer.x+new_x)<radius_sum:
-                    self.still_collide=True
+    #            if math.hypot(bouncer.y-new_y,bouncer.x+new_x)<radius_sum:
+    #                self.still_collide=True
 
-                #assign vals
-                self.x = new_x
-                self.y = new_y
-                self.xv = new_xv
-                self.yv = new_yv
+    #            #assign vals
+    #            self.x = new_x
+    #            self.y = new_y
+    #            self.xv = new_xv
+    #            self.yv = new_yv
 
 
-    @property
-    def calc_new_loc(self):
-        xv2 = self.xv 
-        x2 = self.x + xv2
-        yv2 = self.yv + g/fps
-        y2 = self.y + yv2
+    #@property
+    #def calc_new_loc(self):
+    #    xv2 = self.xv 
+    #    x2 = self.x + xv2
+    #    yv2 = self.yv + g/fps
+    #    y2 = self.y + yv2
         
-        if x2-self.w<0 or (x2+self.w)>scr_w:
-            xv2 = (self.xv *-1) * friction
-            x2 = min(max(self.x + xv2,0),scr_w-self.w)
-        if y2-self.h<0 or (y2+self.h)>scr_h:
-            yv2 = self.yv*-1 + g/fps
-            xv2 = self.xv * friction
-            y2 = min(max(self.y + yv2 ,0),scr_h-self.h)
+    #    if x2-self.w<0 or (x2+self.w)>scr_w:
+    #        xv2 = (self.xv *-1) * friction
+    #        x2 = min(max(self.x + xv2,0),scr_w-self.w)
+    #    if y2-self.h<0 or (y2+self.h)>scr_h:
+    #        yv2 = self.yv*-1 + g/fps
+    #        xv2 = self.xv * friction
+    #        y2 = min(max(self.y + yv2 ,0),scr_h-self.h)
                    
-        return(x2,y2,xv2,yv2)
+    #    return(x2,y2,xv2,yv2)
     
-    @property
-    def rect(self):
-        return pygame.Rect.circle(surface=screen, color=self.color, center=(self.x,self.y), radius=self.r, width=self.w)
+    #@property
+    #def rect(self):
+    #    return pygame.Rect.circle(surface=screen, color=self.color, center=(self.x,self.y), radius=self.r, width=self.w)
         
 class Bouncer(Object):
     decel_factor = .99
     
     @property
     def calc_new_loc(self):
-        xv2 = self.xv * friction
+        yv = Gary.yv
+        xv = Gary.xv
+
+        pressed = pygame.key.get_pressed()
+        if pressed[pygame.K_w]: yv = yv + .3
+        if pressed[pygame.K_s]: yv = yv - .3
+        if pressed[pygame.K_a]: xv = xv - .3
+        if pressed[pygame.K_d]: xv = xv + .3
+        
+        xv2 = xv * friction
         x2 = self.x + xv2
-        yv2 = self.yv * friction
-        y2 = self.y + yv2
+        yv2 = yv * friction
+        y2 = self.y - yv2
         
         if x2-self.w<0 or (x2+self.w)>scr_w:
             xv2 = 0
@@ -157,32 +229,29 @@ class Bouncer(Object):
         if y2-self.h<0 or (y2+self.h)>scr_h:
             yv2 = 0
             y2 = min(max(self.y - self.h ,0),scr_h-self.h)
-            
-        return(x2,y2,xv2,yv2)
+        #convert to v and rad
+        v_new = math.hypot(yv2,xv2)
+        rad_new = math.atan2(yv2,xv2)
+        return v_new, rad_new
 
-
+    #self, color, x, y, w, h, m, v, rad
 Gary = Bouncer(
         color=(0,0,255)
         , x=scr_w/2
         , y= scr_h*.8
         , w=30, h=30
-        ,xv=0, yv=0
-        ,  m=5)
+        ,  m=5, v=0
+        , rad=0)
 
-Bally = Ball(
+Bally = Object(
         color=(0,255,0)
         , w=10, h=10
         , x=random.randint(scr_w*.1,scr_w*.9) 
-        , y= random.randint(scr_h*.1,scr_h*.3)   
-        , xv=random.randint(-2,2)
-        , yv=random.randint(0,2)
-        , m=1)    
+        , y= random.randint(scr_h*.1,scr_h*.3)  
+        , m=1 , v=.5
+        ,rad = math.radians(random.randint( 45, 135) ) )    
 
-def calc_chg_xv_yv(obj1,obj2):
-    obj1_new_xv = (obj1.xv * (obj1.m - obj2.m) + (2 * obj2.m * obj2.xv)) / (obj1.m + obj2.m)
-    obj1_new_yv = (obj1.yv * (obj1.m - obj2.m) + (2 * obj2.m * obj2.yv)) / (obj1.m + obj2.m)
-    return(obj1_new_xv, obj1_new_yv)
-    
+  
 
 pygame.init()
 screen = pygame.display.set_mode((scr_w, scr_h))
@@ -203,22 +272,19 @@ class Game:
                         pygame.quit()
                         #sys.exit() 
             
-            
-            pressed = pygame.key.get_pressed()
-            if pressed[pygame.K_w]: Gary.y -= 3
-            if pressed[pygame.K_s]: Gary.y += 3
-            if pressed[pygame.K_a]: Gary.x -= 3
-            if pressed[pygame.K_d]: Gary.x += 3
-            
-            
-            
-            
+            #includes user keypresses
+            Gary.v, Gary.rad = Gary.calc_new_loc
+
+
+
             # update game state
-            Bally.x,Bally.y,Bally.xv,Bally.yv = Bally.calc_new_loc
-            Gary.x,Gary.y,Gary.xv,Gary.yv = Gary.calc_new_loc
-                                 
-            #more game state here
-            Bally.bouncer_collision(Gary)
+            Bally.update_xy
+            Bally.update_v_rad
+
+            #check for collisions        
+            if Bally.check_collide(Gary)==True:
+                Bally.v, Bally.r = collision(Bally,Gary)
+                Gary.v, Gary.r = collision(Gary,Bally)
 
 
             
@@ -226,16 +292,16 @@ class Game:
             screen.fill((0, 0, 0))
                     
             # draw game state to screen
-            pygame.draw.circle(screen, Gary.color, (int(Gary.x),int(Gary.y)) ,Gary.w)
-            pygame.draw.circle(screen, Bally.color, (int(Bally.x),int(Bally.y)) ,Bally.w)
+            Gary.circle_rect
+            Bally.circle_rect
             
             # draw framerate on screen
             framerate = font.render(str(int(clock.get_fps())), True, pygame.Color('white'))
             screen.blit(framerate, (scr_w-50,50))
             
         #    draw hypot distance on screen #for debugging
-            Bally_rad = font.render(str(Bally.rad),True,pygame.Color('white'))
-            screen.blit(Bally_rad,(Gary.x,Gary.y))
+            #Bally_rad = font.render(str(Bally.rad),True,pygame.Color('white'))
+            #screen.blit(Bally_rad,(Gary.x,Gary.y))
             
             pygame.display.flip()
             clock.tick(fps)
