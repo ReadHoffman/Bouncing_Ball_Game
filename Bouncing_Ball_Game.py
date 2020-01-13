@@ -12,7 +12,7 @@ gc.collect()
 #constants
 scr_w = 400
 scr_h = 700
-wall_objs = [Wall_W,Wall_S,Wall_E,Wall_N]
+wall_objs = [[Wall_W,Wall_S,Wall_E,Wall_N]]
 wall_pts = [[scr_w*.1,scr_h*.1],[scr_w*.1,scr_h*.9],[scr_w*.9,scr_h*.9],[scr_w*.9,scr_h*.1],[scr_w*.1,scr_h*.1]]
 g = -9.8
 g_rad = math.pi*1.5
