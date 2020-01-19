@@ -69,7 +69,9 @@ class Object(pygame.sprite.Sprite):
     
     @property
     def yv(self):
-        return math.sin(self.rad)*self.v + g/fps #make sure to add change due to gravity
+        new_yv = math.sin(self.rad)*self.v + g/fps #make sure to add change due to gravity
+        if self.y-new_yv+self.h>= Wall_S.y: new_yv = math.sin(self.rad)*self.v
+        return new_yv
 
     @property
     def update_v_rad(self):
@@ -230,8 +232,8 @@ class Bouncer(Object):
     
     @property
     def calc_new_loc(self):
-        yv = Gary.yv
-        xv = Gary.xv
+        yv = self.yv
+        xv = self.xv
 
         pressed = pygame.key.get_pressed()
         if pressed[pygame.K_w]: yv = yv + .3
@@ -261,7 +263,7 @@ Gary = Bouncer(
         , x=scr_w/2
         , y= scr_h*.8
         , w=30, h=30
-        ,  m=5, v=0
+        , m=5, v=0
         , rad=0)
 
 Bally = Object(
@@ -331,13 +333,7 @@ class Game:
             pygame.display.flip()
             clock.tick(fps)
         
-
-        
-x = 200
-y = 200
-blue = (0, 128, 255)
-
-  
+ 
 
 if __name__=="__main__":
     Game.main()
