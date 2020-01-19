@@ -5,26 +5,22 @@ Created on Wed Jan  1 16:15:35 2020
 @author: Read
 """
 
-import pygame, sys, math, random, gc , numpy as np
+import pygame, sys, math, random, gc , numpy as np, statistics 
 
 gc.collect()
 
 #constants
 scr_w = 400
 scr_h = 700
-wall_objs = [[Wall_W,Wall_S,Wall_E,Wall_N]]
-wall_pts = [[scr_w*.1,scr_h*.1],[scr_w*.1,scr_h*.9],[scr_w*.9,scr_h*.9],[scr_w*.9,scr_h*.1],[scr_w*.1,scr_h*.1]]
 g = -9.8
 g_rad = math.pi*1.5
 fps = 60
 friction=.9
 
 def collision(r1,r2):
-    ca = r1.radians_from_obj(r2) #ca means contact angle
-    xv_new_r1 = ( r1.v*math.cos(r1.rad-ca)*(r1.m-r2.m)+2*r2.mom*math.cos(r2.rad-ca) 
-                 )/(r1.m+r2.m)*cos(ca) + r1.v*math.sin(r1.rad-ca)*math.cos(ca+math.pi/2)
-    yv_new_r1 = ( r1.v*math.cos(r1.rad-ca)*(r1.m-r2.m)+2*r2.mom*math.cos(r2.rad-ca) 
-                 )/(r1.m+r2.m)*cos(ca) + r1.v*math.sin(r1.rad-ca)*math.sin(ca+math.pi/2)
+    ca = r1.radians_from_obj(r2)[0] #ca means contact angle
+    xv_new_r1 = ( r1.v*math.cos(r1.rad-ca)*(r1.m-r2.m)+2*r2.mom*math.cos(r2.rad-ca) )/(r1.m+r2.m)*math.cos(ca) + r1.v*math.sin(r1.rad-ca)*math.cos(ca+math.pi/2)
+    yv_new_r1 = ( r1.v*math.cos(r1.rad-ca)*(r1.m-r2.m)+2*r2.mom*math.cos(r2.rad-ca) )/(r1.m+r2.m)*math.cos(ca) + r1.v*math.sin(r1.rad-ca)*math.sin(ca+math.pi/2)
    #convert to v and rad
     v_new = math.hypot(yv_new_r1,xv_new_r1)
     rad_new = math.atan2(yv_new_r1,xv_new_r1)
@@ -32,21 +28,29 @@ def collision(r1,r2):
     return v_new , rad_new
 
 class Wall():
-    def __init__(self,x1,y1,x2,y2,x,y):
+    def __init__(self,x1,y1,x2,y2):
         self.x1 = x1
         self.y1 = y1
         self.x2 = x2
         self.y2 = y2
-        self.x = x
-        self.y = y
+        self.r = 0
+        self.x = statistics.mean([self.x1,self.x2])
+        self.y = statistics.mean([self.y1,self.y2])
+        self.color = (255,255,255)
+        self.m = 1000
+        self.v = 0
+        self.mom = 0
+        self.rad = 0
 
-#create wall objs
-for c,wall in enumerate(wall_objs):
-    x1 = wall_pts[c][0]
-    y1 = wall_pts[c][1]
-    x2 = wall_pts[c+1][0]
-    y2 = wall_pts[c+1][1]
-    wall = Wall(x1,y1,x2,y2,x,y)
+    @property
+    def line_rect(self):
+        return(pygame.draw.line(screen, self.color, ( int(self.x1) , int(self.y1) ), ( int(self.x2) , int(self.y2) ), 1) )
+
+Wall_W = Wall(scr_w*.1,scr_h*.1,scr_w*.1,scr_h*.9)
+Wall_S = Wall(scr_w*.1,scr_h*.9,scr_w*.9,scr_h*.9)
+Wall_E = Wall(scr_w*.9,scr_h*.9,scr_w*.9,scr_h*.1)
+Wall_N = Wall(scr_w*.9,scr_h*.1,scr_w*.1,scr_h*.1)
+wall_objs = [Wall_W,Wall_S,Wall_E,Wall_N]
 
 class Object(pygame.sprite.Sprite):  
     def __init__(self, color, x, y, w, h, m, v, rad):
@@ -88,7 +92,7 @@ class Object(pygame.sprite.Sprite):
     
     @property
     def r(self):
-        return self.w
+        return int(self.w)
     
     @property
     def deg(self):
@@ -96,24 +100,41 @@ class Object(pygame.sprite.Sprite):
     
     @property
     def circle_rect(self):
-        return(pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.r,1) )
+        return pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.r) 
         
     @property
     def mom(self):
         return(self.m*self.v)
 
     def check_collide(self,obj):
-        x_dist = abs(obj.x - self.x)
-        y_dist = abs(obj.y - self.y)
-        hypot = math.hypot(y_dist,x_dist)
+        # control for wall collisions
+        if obj.__class__.__name__ =='Wall':
+            if obj.x == obj.x1:
+                obj.y = self.y
+            else:
+                obj.x = self.x
+        else:
+            pass
+        
+        x_dist = abs(obj.x - self.next_x)
+        y_dist = abs(obj.y - self.next_y)
+        next_hypot = math.hypot(y_dist,x_dist)
         radius_sum = obj.r+self.r
-        if hypot<radius_sum:
+        if next_hypot<radius_sum:
             return True
         else:
             False
 
-    @property
     def radians_from_obj(self,obj):
+        # control for wall collisions
+        if obj.__class__.__name__ =='Wall':
+            if obj.x == obj.x1:
+                obj.y = self.y
+            else:
+                obj.x = self.x
+        else:
+            pass
+
         x_dist = abs(obj.x - self.x)
         y_dist = abs(obj.y - self.y)
         hypot = math.hypot(y_dist,x_dist)
@@ -283,15 +304,19 @@ class Game:
 
             #check for collisions        
             if Bally.check_collide(Gary)==True:
-                Bally.v, Bally.r = collision(Bally,Gary)
-                Gary.v, Gary.r = collision(Gary,Bally)
+                Bally.v, Bally.rad = collision(Bally,Gary)
+                Gary.v, Gary.rad = collision(Gary,Bally)
+            for wall in wall_objs:
+                if Bally.check_collide(wall) == True:
+                    Bally.v, Bally.rad = collision(Bally,wall)           
+                    
 
-
-            
             #draw screen
             screen.fill((0, 0, 0))
                     
             # draw game state to screen
+            for wall in wall_objs:
+                wall.line_rect
             Gary.circle_rect
             Bally.circle_rect
             
